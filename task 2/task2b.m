@@ -18,4 +18,11 @@ x = [S0;
     I0;
     R0];
 
-% unfinished bwaa
+% initialise time and state vector for tracking
+t(1) = 0;
+state_vec_tracking(1,:) = x;
+
+% Run simulations
+for i = 1:t
+    % unfinished bwaa
+end
