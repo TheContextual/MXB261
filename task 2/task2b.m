@@ -1,3 +1,4 @@
+clear all;
 %% Initial parameters
 exposedToInfectedRate = 1/5; % beta
 transmissionRate = 1/14;     % alpha
@@ -37,11 +38,12 @@ v3 = [0;
 % initialise time and state vector for tracking
 t_vector(1) = 0;
 state_vec_tracking(1,:) = x;
+disp(state_vec_tracking)
 
 % Run simulations
 for i = 1:3 % number of simulations
-    while t < T
-        count = 1;
+    count = 1;
+    while t < T;
         % Calculate q rates
         q1 = (exposedToInfectedRate*x(1)*x(3))/Population;
         q2 = transmissionRate*x(2);
