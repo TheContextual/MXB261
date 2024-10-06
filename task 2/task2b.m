@@ -39,7 +39,7 @@ t_vector(1) = 0;
 state_vec_tracking(1,:) = x;
 
 % Run simulations
-for i = 1:2 % number of simulations
+for i = 1:3 % number of simulations
     while t < T
         count = 1;
         % Calculate q rates
