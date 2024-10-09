@@ -40,24 +40,53 @@ clc; % Clear command window.
 % - Create a movie for each plot no slower than 10 frames per second 
 %   (40 seconds).
 
-% Run the simulation
-runSimulation(1, 1/5, 1/100, 30);
+% Create Figure 1 for Regime 1
+figure('Name', "Alpha = 1, Beta = 1/14, Rho = 1/20");
+rows = 2;
+cols = 5;
+for index = 1:rows*cols
+    subplot(rows, cols, index);
+    runSimulationAndCreateSubplot(1, 1/14, 1/20, 10 * index, index, "Figure 1");
+end
+
+% Create Figure 2 for Regime 2
+figure('Name', "Alpha = 0.5, Beta = 1/14, Rho = 1/10");
+rows = 2;
+cols = 5;
+for index = 1:rows*cols
+    subplot(rows, cols, index);
+    runSimulationAndCreateSubplot(1, 1/14, 1/10, 10 * index, index, "Figure 2");
+end
 
 % Runs the spatial stochastic simulation
 % alpha = chance susceptible agent gets turn exposed
 % beta = chance exposed agents turn infected
 % rho = chance infected agents turn recovered
 % B = number of bridges across the river
-function runSimulation(alpha, beta, rho, B)
+% index = index of subplot for saving
+% saveDir = directory of save file for images and movies
+function runSimulationAndCreateSubplot(alpha, beta, rho, B, index, saveDir)
+    fprintf("=== Running Simulation %d ===\n", index); % Debug
+
+    % Create folders for images and videos
+    saveFileDir = saveDir + '\\' + index;
+    mkdir(saveFileDir);
+
     % Few Resused Settings
     gridSize = 101;
     numOfSusceptibleAgents = 990;
     numOfInfectedAgents = 10;
     numOfSteps = 400;
-    frameMultiplier = 10;
+    frameMultiplier = 4; % Used to upscale the images and videos
+
+    % Data of each type of agent for plots
+    susceptibleAgentData = zeros(numOfSteps, 1);
+    exposedAgentData = zeros(numOfSteps, 1);
+    infectedAgentData = zeros(numOfSteps, 1);
+    recoveredAgentData = zeros(numOfSteps, 1);
 
     % Start the video of the simulation
-    video = createVideo(10);
+    video = createVideo(10, index, saveFileDir);
     
     % Create and populate city grid tiles
     cityGrid = createGrid(gridSize);
@@ -72,12 +101,19 @@ function runSimulation(alpha, beta, rho, B)
     % Write first frame of video
     open(video);
     colourmap = createFrame(cityGrid, agentGrid, frameMultiplier);
-    imwrite(colourmap, 'start.jpeg'); % Debug
+    img_title = sprintf(saveFileDir + "\\start-%d.jpeg", index);
+    imwrite(colourmap, img_title); % Debug
     writeVideo(video, colourmap); 
 
     printAgentDistribution(agentGrid); % Debug
+
+    % Record number of each type of agent
+    susceptibleAgentData(1) = countAllAgents(agentGrid, 1);
+    exposedAgentData(1) = countAllAgents(agentGrid, 2);
+    infectedAgentData(1) = countAllAgents(agentGrid, 3);
+    recoveredAgentData(1) = countAllAgents(agentGrid, 4);
     
-     % Loop through each step of simulation
+    % Loop through each step of simulation
     step = 1;
     while step <= numOfSteps
         agentGrid = randomlyMoveAgents(agentGrid, cityGrid); % Randomly move agents
@@ -89,18 +125,35 @@ function runSimulation(alpha, beta, rho, B)
 
         fprintf("Step %d Completed...\n", step); % Debug
 
-        step = step + 1;
+        step = step + 1; % Iterate step
         printAgentDistribution(agentGrid); % Debug
+
+        % Record number of each type of agent per step
+        susceptibleAgentData(step) = countAllAgents(agentGrid, 1);
+        exposedAgentData(step) = countAllAgents(agentGrid, 2);
+        infectedAgentData(step) = countAllAgents(agentGrid, 3);
+        recoveredAgentData(step) = countAllAgents(agentGrid, 4);
         
-        % Stop simulation if no more chance to update agents
+        % Stop simulation if no more exposed or infected
         if countAllAgents(agentGrid, 2) + countAllAgents(agentGrid, 3) == 0
             fprintf("Simulation Stopped As No More Infected Agents...\n"); % Debug
+
+            % Cut off data to shorten plots
+            susceptibleAgentData = susceptibleAgentData(1:step);
+            exposedAgentData = exposedAgentData(1:step);
+            infectedAgentData = infectedAgentData(1:step);
+            recoveredAgentData = recoveredAgentData(1:step);
+
             break;
         end
     end
 
     colourmap = createFrame(cityGrid, agentGrid, frameMultiplier); % Debug
-    imwrite(colourmap, 'end.jpeg'); % Debug
+    img_title = sprintf(saveFileDir + "\\end-%d.jpeg", index);
+    imwrite(colourmap, img_title); % Debug
+    
+    % Create the plot with data
+    createPlot(susceptibleAgentData, exposedAgentData, infectedAgentData, recoveredAgentData, B);
     
     % Finish video
     close(video)
@@ -147,6 +200,7 @@ end
 
 % Populated grid with agents
 % grid = referenced grid
+% cityGrid = grid of city tiles to condition spawning
 % numOfSusceptible = number of agents susceptible to getting sick.
 % numOfInfected = number of agents that can infect other agents.
 function gridAfterPopulation = populateGridWithAgents(grid, cityGrid, numOfSusceptible, numOfInfected)
@@ -180,7 +234,7 @@ function gridAfterPopulation = populateGridWithAgents(grid, cityGrid, numOfSusce
             infectedAgentCounter = infectedAgentCounter + 1;
         end
     end
-    gridAfterPopulation = grid;
+    gridAfterPopulation = grid; % Record and update grid
 end
 
 % Randomly moves the grid of agents
@@ -226,6 +280,9 @@ end
 
 % Goes through each agent and updates their infection state
 % agentGrid = referenced grid of agent cells
+% exposeChance = chance to expose an agent
+% infectionChance = chance for exposed agent to be infected
+% recoveryChance = chance for infected agent to recover
 function agentGridAfterUpdate = updateAgentStates(agentGrid, exposeChance, infectionChance, recoveryChance)
     agentGridAfterUpdate = agentGrid; % Copy grid
     % Loop through each cell
@@ -280,8 +337,11 @@ end
 
 % Create a video to write to
 % frameRate = framerate of the video
-function video = createVideo(frameRate)
-    video = VideoWriter("Video.mp4", 'MPEG-4'); % Create a video for displaying simulation.
+% index = index of the subplot for saving
+% saveFileDir = the directory of the save file
+function video = createVideo(frameRate, index, saveFileDir)
+    vid_title = sprintf(saveFileDir + "\\video-%d.mp4", index);
+    video = VideoWriter(vid_title, 'MPEG-4'); % Create a video for displaying simulation.
     video.FrameRate = frameRate;
 end
 
@@ -344,7 +404,35 @@ function numOfAgents = countAllAgents(agentGrid, state)
     end
 end
 
-% Debug Function
+% Creates the plot of each agent count
+% susceptibleAgentData = tracked data of number of susceptible agents
+% exposedAgentData = tracked data of number of exposed agents
+% infectedAgentData = tracked data of number of infected agents
+% recoveredAgentData = tracked data of number of recovered agents
+% numOfBridges = number of bridges (to label each plot)
+function createPlot(susceptibleAgentData, exposedAgentData, infectedAgentData, recoveredAgentData, numOfBridges)
+    plotLength = length(susceptibleAgentData); % Calculate plot length
+    plotHeight = 1000; % Plot Height
+    x_axis = 1:plotLength; % X-Axis data
+    plot(x_axis, susceptibleAgentData, 'k', ...
+        x_axis, exposedAgentData, 'r', ...
+        x_axis, infectedAgentData, 'g', ...
+        x_axis, recoveredAgentData, 'b'); % Create plot with agent data
+    % Susceptible = Black
+    % Exposed = Red
+    % Infected = Green
+    % Recovered = Blue (Can't be white because of background)
+
+    % Plot Settings
+    xlabel('Step');
+    ylabel('Num Of Agents');
+    xlim([0 plotLength]);
+    ylim([0 plotHeight]);
+    plotTitle = sprintf('%d Bridges', numOfBridges);
+    title(plotTitle);
+end
+
+% Debug function to print agents state numbers
 function printAgentDistribution(agentGrid)
     fprintf("Agent Distribution: %d | %d | %d | %d\n", countAllAgents(agentGrid, 1), countAllAgents(agentGrid, 2), countAllAgents(agentGrid, 3), countAllAgents(agentGrid, 4))
 end
